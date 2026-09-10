@@ -1081,6 +1081,8 @@ export type AgentDeviceRunSessionRemoteConfig = {
   __typename?: 'AgentDeviceRunSessionRemoteConfig';
   agentDeviceRemoteSessionToken: Scalars['String']['output'];
   agentDeviceRemoteSessionUrl: Scalars['String']['output'];
+  /** URL of the preview server, for reaching its API rather than its page. */
+  previewApiUrl?: Maybe<Scalars['String']['output']>;
   /** Session token gating the web preview. Null when the preview runs ungated. */
   webPreviewToken?: Maybe<Scalars['String']['output']>;
   /**
@@ -4673,6 +4675,8 @@ export type AppiumRunSessionRemoteConfig = {
   appiumUrl: Scalars['String']['output'];
   /** W3C capabilities for the device that backs this session. */
   capabilities: Scalars['JSONObject']['output'];
+  /** URL of the preview server, for reaching its API rather than its page. */
+  previewApiUrl?: Maybe<Scalars['String']['output']>;
   /** Session token gating the web preview. Null when the preview runs ungated. */
   webPreviewToken?: Maybe<Scalars['String']['output']>;
   /**
@@ -5081,6 +5085,8 @@ export type AppleTeamUpdateInput = {
 
 export type ArgentRunSessionRemoteConfig = {
   __typename?: 'ArgentRunSessionRemoteConfig';
+  /** URL of the preview server, for reaching its API rather than its page. */
+  previewApiUrl?: Maybe<Scalars['String']['output']>;
   toolsAuthToken?: Maybe<Scalars['String']['output']>;
   toolsUrl: Scalars['String']['output'];
   /** Session token gating the web preview. Null when the preview runs ungated. */
@@ -11072,6 +11078,8 @@ export type SentryProjectMutation_DeleteSentryProjectArgs = {
  */
 export type ServeSimRunSessionRemoteConfig = {
   __typename?: 'ServeSimRunSessionRemoteConfig';
+  /** URL of the preview server, for reaching its API rather than its page. */
+  previewApiUrl?: Maybe<Scalars['String']['output']>;
   /** Session token gating the preview. Null when the preview runs ungated. */
   previewToken?: Maybe<Scalars['String']['output']>;
   previewUrl: Scalars['String']['output'];
@@ -13135,6 +13143,8 @@ export type WebNotificationUpdateReadStateInput = {
 
 export type WebPreviewOnlyRunSessionRemoteConfig = {
   __typename?: 'WebPreviewOnlyRunSessionRemoteConfig';
+  /** URL of the preview server, for reaching its API rather than its page. */
+  previewApiUrl?: Maybe<Scalars['String']['output']>;
   /** Session token gating the web preview. Null when the preview runs ungated. */
   webPreviewToken?: Maybe<Scalars['String']['output']>;
   webPreviewUrl: Scalars['String']['output'];
@@ -16178,11 +16188,11 @@ export type DeviceRunSessionByIdQueryVariables = Exact<{
 
 
 export type DeviceRunSessionByIdQuery = { __typename?: 'RootQuery', deviceRunSessions: { __typename?: 'DeviceRunSessionQuery', byId: { __typename?: 'DeviceRunSession', id: string, name?: string | null, tags: Array<string>, status: DeviceRunSessionStatus, type: DeviceRunSessionType, platform: AppPlatform, createdAt: any, startedAt?: any | null, finishedAt?: any | null, updatedAt: any, app: { __typename?: 'App', id: string, slug: string, ownerAccount: { __typename?: 'Account', id: string, name: string } }, artifacts: Array<{ __typename?: 'DeviceRunSessionArtifact', id: string, name: string, filename: string, downloadUrl: string, fileSizeBytes?: number | null, metadata?: any | null, createdAt: any, updatedAt: any }>, remoteConfig?:
-        | { __typename: 'AgentDeviceRunSessionRemoteConfig', agentDeviceRemoteSessionUrl: string, agentDeviceRemoteSessionToken: string, webPreviewUrl?: string | null, webPreviewToken?: string | null }
-        | { __typename: 'AppiumRunSessionRemoteConfig', appiumUrl: string, capabilities: any, webPreviewUrl?: string | null, webPreviewToken?: string | null }
-        | { __typename: 'ArgentRunSessionRemoteConfig', toolsUrl: string, toolsAuthToken?: string | null, webPreviewUrl?: string | null, webPreviewToken?: string | null }
-        | { __typename: 'ServeSimRunSessionRemoteConfig', previewUrl: string, previewToken?: string | null }
-        | { __typename: 'WebPreviewOnlyRunSessionRemoteConfig', previewUrl: string, previewToken?: string | null }
+        | { __typename: 'AgentDeviceRunSessionRemoteConfig', agentDeviceRemoteSessionUrl: string, agentDeviceRemoteSessionToken: string, webPreviewUrl?: string | null, webPreviewToken?: string | null, previewApiUrl?: string | null }
+        | { __typename: 'AppiumRunSessionRemoteConfig', appiumUrl: string, capabilities: any, webPreviewUrl?: string | null, webPreviewToken?: string | null, previewApiUrl?: string | null }
+        | { __typename: 'ArgentRunSessionRemoteConfig', toolsUrl: string, toolsAuthToken?: string | null, webPreviewUrl?: string | null, webPreviewToken?: string | null, previewApiUrl?: string | null }
+        | { __typename: 'ServeSimRunSessionRemoteConfig', previewUrl: string, previewToken?: string | null, previewApiUrl?: string | null }
+        | { __typename: 'WebPreviewOnlyRunSessionRemoteConfig', previewUrl: string, previewToken?: string | null, previewApiUrl?: string | null }
        | null, turtleJobRun?: { __typename?: 'JobRun', id: string, status: JobRunStatus } | null } } };
 
 export type DeviceRunSessionsByAppIdQueryVariables = Exact<{

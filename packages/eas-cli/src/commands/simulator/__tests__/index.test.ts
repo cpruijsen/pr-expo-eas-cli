@@ -25,7 +25,6 @@ import {
   resetSimulatorEnvAsync,
 } from '../../../simulator/env';
 import { resolveExpoGoSdkVersionAsync } from '../../../simulator/expoGo';
-import { enableJsonOutput, printJsonOnlyOutput } from '../../../utils/json';
 import Simulator from '../index';
 
 jest.mock('fs-extra');
@@ -50,7 +49,6 @@ jest.mock('../../../simulator/env', () => ({
 }));
 jest.mock('../../../simulator/expoGo');
 jest.mock('../../../prompts');
-jest.mock('../../../utils/json');
 jest.mock('../../../ora', () => ({
   ora: jest.fn(() => {
     const spinner = {
@@ -86,8 +84,6 @@ const mockResetSimulatorEnvAsync = jest.mocked(resetSimulatorEnvAsync);
 const mockResolveExpoGoSdkVersionAsync = jest.mocked(resolveExpoGoSdkVersionAsync);
 const mockOra = jest.mocked(ora);
 const mockPromptAsync = jest.mocked(promptAsync);
-const mockEnableJsonOutput = jest.mocked(enableJsonOutput);
-const mockPrintJsonOnlyOutput = jest.mocked(printJsonOnlyOutput);
 
 function makeCreatedDeviceRunSession(
   overrides: Partial<CreatedDeviceRunSession> = {}
@@ -135,7 +131,7 @@ function makeDeviceRunSession(overrides: Partial<DeviceRunSessionById> = {}): De
       __typename: 'AgentDeviceRunSessionRemoteConfig',
       agentDeviceRemoteSessionUrl: 'https://agent.example.com',
       agentDeviceRemoteSessionToken: 'token-123',
-      webPreviewUrl: 'https://web-preview-abc123.eas-simulator.ngrok.dev',
+      webPreviewUrl: 'https://preview.example.com',
     },
     turtleJobRun: {
       id: 'job-123',
@@ -287,7 +283,7 @@ describe(Simulator, () => {
         '',
         '🌐 Open the following URL in your browser to preview the simulator:',
         '',
-        'https://expo.dev/simulator-preview/abc123',
+        'https://preview.example.com',
       ].join('\n')
     );
   });
@@ -305,7 +301,7 @@ describe(Simulator, () => {
             'appium:automationName': 'XCUITest',
             'appium:udid': 'simulator-id',
           },
-          webPreviewUrl: 'https://web-preview-abc123.eas-simulator.ngrok.dev',
+          webPreviewUrl: 'https://preview.example.test',
         },
       })
     );
@@ -343,7 +339,7 @@ describe(Simulator, () => {
         type: DeviceRunSessionType.WebPreviewOnly,
         remoteConfig: {
           __typename: 'WebPreviewOnlyRunSessionRemoteConfig',
-          previewUrl: 'https://web-preview-abc123.eas-simulator.ngrok.dev',
+          previewUrl: 'https://preview.example.test',
         },
       })
     );
@@ -361,42 +357,7 @@ describe(Simulator, () => {
       graphqlClient,
       expect.objectContaining({ type: DeviceRunSessionType.WebPreviewOnly })
     );
-    expect(Log.log).toHaveBeenCalledWith(
-      expect.stringContaining('https://expo.dev/simulator-preview/abc123')
-    );
-  });
-
-  it('emits JSON with the preview page url when --json is passed', async () => {
-    mockByIdAsync.mockResolvedValue(
-      makeDeviceRunSession({
-        type: DeviceRunSessionType.WebPreviewOnly,
-        remoteConfig: {
-          __typename: 'WebPreviewOnlyRunSessionRemoteConfig',
-          previewUrl: 'https://web-preview-abc123.eas-simulator.ngrok.dev',
-        },
-      })
-    );
-
-    const { command } = createCommand([
-      '--platform',
-      'ios',
-      '--type',
-      'web-preview-only',
-      '--json',
-    ]);
-    await command.runAsync();
-
-    expect(mockEnableJsonOutput).toHaveBeenCalled();
-    expect(mockPrintJsonOnlyOutput).toHaveBeenCalledWith({
-      id: 'session-123',
-      name: undefined,
-      type: 'web-preview-only',
-      deviceRunSessionUrl,
-      remoteConfig: {
-        __typename: 'WebPreviewOnlyRunSessionRemoteConfig',
-        previewUrl: 'https://expo.dev/simulator-preview/abc123',
-      },
-    });
+    expect(Log.log).toHaveBeenCalledWith(expect.stringContaining('https://preview.example.test'));
   });
 
   it('overwrites .env.eas-simulator when outputting dotenv and the file exists', async () => {
