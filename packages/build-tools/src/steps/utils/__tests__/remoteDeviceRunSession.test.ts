@@ -19,13 +19,13 @@ import {
   ensureFfmpegInstalledOnceAsync,
   fetchWebPreviewTurnArgsAsync,
   metricsCorsOriginToServeSimArgs,
-  simulatorPreviewUrl,
   startDeviceWebPreviewWithTunnelAsync,
   startExpoDeviceHubWithTunnelAsync,
   startNgrokTunnelAsync,
   turnIceServersToWebPreviewArgs,
   waitForDeviceRunSessionStoppedAsync,
   waitForWebPreviewReadyAsync,
+  websiteOrigin,
 } from '../remoteDeviceRunSession';
 
 jest.mock('@ngrok/ngrok');
@@ -286,42 +286,9 @@ describe(waitForWebPreviewReadyAsync, () => {
   });
 });
 
-describe(simulatorPreviewUrl, () => {
-  it('points at the preview page for the session', () => {
-    expect(simulatorPreviewUrl('https://web-preview-abc123.eas-simulator.ngrok.dev', {})).toBe(
-      'https://expo.dev/simulator-preview/abc123'
-    );
-  });
-
-  it.each(['https://agent-device-abc.eas-simulator.ngrok.dev', 'not-a-url', ''])(
-    'falls back to what it was given when there is no preview host: %p',
-    url => {
-      expect(simulatorPreviewUrl(url, {})).toBe(url);
-    }
-  );
-
-  it('points at staging.expo.dev when EXPO_STAGING is set', () => {
-    expect(
-      simulatorPreviewUrl('https://web-preview-abc123.eas-simulator.ngrok.dev', {
-        EXPO_STAGING: '1',
-      })
-    ).toBe('https://staging.expo.dev/simulator-preview/abc123');
-  });
-
-  it('drops everything the tunnel url carries', () => {
-    expect(
-      simulatorPreviewUrl(
-        'https://web-preview-abc123.eas-simulator.ngrok.dev/session?token=secret#frame',
-        {}
-      )
-    ).toBe('https://expo.dev/simulator-preview/abc123');
-  });
-});
-
 describe(startNgrokTunnelAsync, () => {
   it('uses a 128-bit capability hostname and exposes explicit cleanup', async () => {
     const close = jest.fn().mockResolvedValue(undefined);
-    const logger = createLoggerMock();
     jest.mocked(ngrok.forward).mockResolvedValue({
       url: () => 'https://web-preview.example.test',
       close,
@@ -332,7 +299,7 @@ describe(startNgrokTunnelAsync, () => {
       subdomainPrefix: 'web-preview',
       baseDomain: 'eas-simulator.ngrok.dev',
       authtoken: 'token',
-      logger,
+      logger: createLoggerMock(),
     });
 
     expect(ngrok.forward).toHaveBeenCalledWith(
@@ -343,8 +310,10 @@ describe(startNgrokTunnelAsync, () => {
       })
     );
     expect(tunnel.url).toBe('https://web-preview.example.test');
-    expect(logger.info).toHaveBeenCalledWith(
-      'Starting web preview tunnel -> http://localhost:4321.'
+    expect(ngrok.forward).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: `web-preview-${tunnel.subdomainId}.eas-simulator.ngrok.dev`,
+      })
     );
     await tunnel.stopAsync();
     await tunnel.stopAsync();
@@ -458,7 +427,7 @@ describe(startDeviceWebPreviewWithTunnelAsync, () => {
     expect(command).toBe('npx');
     expect(args).toEqual(createExpoDeviceHubArgs({ port, turnArgs, packageVersion }));
     expect(ngrok.forward).toHaveBeenCalledWith(expect.objectContaining({ addr: port }));
-    expect(preview.previewUrl).toBe('https://android-preview.example.test');
+    expect(preview.apiUrl).toBe('https://android-preview.example.test');
 
     await preview.stopAsync();
     expect(close).toHaveBeenCalledTimes(1);
@@ -479,7 +448,38 @@ describe(startDeviceWebPreviewWithTunnelAsync, () => {
     });
 
     expect(preview.previewToken).toBe('tok-1');
-    expect(preview.previewUrl).toBe('https://preview.example.test');
+    expect(preview.apiUrl).toBe('https://preview.example.test');
+  });
+
+  it.each([
+    [{}, 'https://expo.dev'],
+    [{ EXPO_STAGING: '1' }, 'https://staging.expo.dev'],
+    [{ EXPO_LOCAL: '1' }, 'https://expo.test'],
+  ])('points the preview page at the website for the stage the worker runs in', (stage, origin) => {
+    expect(websiteOrigin({ ...env, ...stage })).toBe(origin);
+  });
+
+  it('points the preview URL at the website page for the tunnel', async () => {
+    jest.mocked(ngrok.forward).mockResolvedValue({
+      url: () => 'https://preview.example.test',
+      close: jest.fn().mockResolvedValue(undefined),
+    } as never);
+
+    const preview = await startDeviceWebPreviewWithTunnelAsync(createCtxMock(), {
+      runtimePlatform: BuildRuntimePlatform.DARWIN,
+      baseDomain,
+      env: { ...env, EXPO_STAGING: '1' },
+      logger: createLoggerMock(),
+      timeoutMs: 10_000,
+    });
+
+    expect(preview.previewPageUrl).toMatch(
+      /^https:\/\/staging\.expo\.dev\/simulator-preview\/[a-f0-9]{32}$/
+    );
+    const previewId = preview.previewPageUrl.split('/').at(-1);
+    expect(ngrok.forward).toHaveBeenCalledWith(
+      expect.objectContaining({ domain: `web-preview-${previewId}.${baseDomain}` })
+    );
   });
 
   // serve-sim is always launched with --require-token, so a missing token means it is running
@@ -542,36 +542,18 @@ describe(startDeviceWebPreviewWithTunnelAsync, () => {
     const port = Number(args[args.indexOf('--port') + 1]);
     expect(port).toBeGreaterThan(0);
     expect(command).toBe('npx');
-    expect(args).toEqual(createServeSimArgs({ port, turnArgs, metricsCorsArgs, packageVersion }));
-    expect(ngrok.forward).toHaveBeenCalledWith(expect.objectContaining({ addr: port }));
-    expect(preview.previewUrl).toBe('https://ios-preview.example.test');
-
-    await preview.stopAsync();
-    expect(close).toHaveBeenCalledTimes(1);
-  });
-
-  it('logs the expo.dev preview page and keeps the tunnel URL for remote config', async () => {
-    const logger = createLoggerMock();
-    const tunnelUrl =
-      'https://web-preview-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.eas-simulator.ngrok.dev';
-    const close = jest.fn().mockResolvedValue(undefined);
-    jest.mocked(ngrok.forward).mockResolvedValue({
-      url: () => tunnelUrl,
-      close,
-    } as never);
-
-    const preview = await startDeviceWebPreviewWithTunnelAsync(createCtxMock(), {
-      runtimePlatform: BuildRuntimePlatform.DARWIN,
-      baseDomain,
-      env,
-      logger,
-      timeoutMs: 10_000,
-    });
-
-    expect(preview.previewUrl).toBe(tunnelUrl);
-    expect(logger.info).toHaveBeenCalledWith(
-      'Web preview URL: https://expo.dev/simulator-preview/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    expect(args).toEqual(
+      createServeSimArgs({
+        port,
+        turnArgs,
+        metricsCorsArgs,
+        frameAncestorArgs: ['--frame-ancestor', 'https://expo.dev'],
+        packageVersion,
+      })
     );
+    expect(args).toContain('--frame-ancestor');
+    expect(ngrok.forward).toHaveBeenCalledWith(expect.objectContaining({ addr: port }));
+    expect(preview.apiUrl).toBe('https://ios-preview.example.test');
 
     await preview.stopAsync();
     expect(close).toHaveBeenCalledTimes(1);
