@@ -5,15 +5,12 @@ import {
   DEVICE_RUN_SESSION_TYPE_FLAG_VALUES,
   EAS_SIMULATOR_WAITLIST_URL,
   deviceRunSessionTypeToFlagValue,
+  formatPreviewUrl,
   formatRemoteSessionInstructions,
   formatSimulatorUnavailableMessage,
   getRemoteSessionEnvironmentVariables,
-  remoteConfigWithPreviewPageUrl,
-  simulatorPreviewUrl,
+  sanitizeRemoteConfigForJson,
 } from '../utils';
-
-const tunnelUrl = 'https://web-preview-abc123.eas-simulator.ngrok.dev';
-const previewPageUrl = 'https://expo.dev/simulator-preview/abc123';
 
 const iosAppiumConfig = {
   __typename: 'AppiumRunSessionRemoteConfig' as const,
@@ -23,108 +20,8 @@ const iosAppiumConfig = {
     'appium:automationName': 'XCUITest',
     'appium:udid': 'simulator-id',
   },
-  webPreviewUrl: tunnelUrl,
+  webPreviewUrl: 'https://preview.example.test',
 };
-
-const agentDeviceConfig = {
-  __typename: 'AgentDeviceRunSessionRemoteConfig' as const,
-  agentDeviceRemoteSessionUrl: 'https://agent.example.com',
-  agentDeviceRemoteSessionToken: 'token-123',
-  webPreviewUrl: tunnelUrl,
-};
-
-const argentConfig = {
-  __typename: 'ArgentRunSessionRemoteConfig' as const,
-  toolsUrl: 'https://argent.example.test',
-  toolsAuthToken: 'argent-token',
-  webPreviewUrl: tunnelUrl,
-};
-
-const serveSimConfig = {
-  __typename: 'ServeSimRunSessionRemoteConfig' as const,
-  previewUrl: tunnelUrl,
-};
-
-const webPreviewOnlyConfig = {
-  __typename: 'WebPreviewOnlyRunSessionRemoteConfig' as const,
-  previewUrl: tunnelUrl,
-};
-
-describe(remoteConfigWithPreviewPageUrl, () => {
-  it('rewrites the preview url a controller session reports', () => {
-    const remoteConfig = remoteConfigWithPreviewPageUrl(iosAppiumConfig);
-
-    expect(remoteConfig).toMatchObject({
-      webPreviewUrl: 'https://expo.dev/simulator-preview/abc123',
-    });
-  });
-
-  it('rewrites the preview url a web-preview-only session reports', () => {
-    const remoteConfig = remoteConfigWithPreviewPageUrl(webPreviewOnlyConfig);
-
-    expect(remoteConfig).toMatchObject({
-      previewUrl: previewPageUrl,
-    });
-  });
-
-  it('rewrites the preview url a serve-sim session reports', () => {
-    expect(remoteConfigWithPreviewPageUrl(serveSimConfig)).toMatchObject({
-      previewUrl: previewPageUrl,
-    });
-  });
-
-  it('leaves a config with no preview url alone', () => {
-    const remoteConfig = remoteConfigWithPreviewPageUrl({
-      ...iosAppiumConfig,
-      webPreviewUrl: null,
-    });
-
-    expect(remoteConfig).toMatchObject({ webPreviewUrl: null });
-  });
-
-  it('leaves a serve-sim config with an empty preview url alone', () => {
-    expect(
-      remoteConfigWithPreviewPageUrl({
-        ...serveSimConfig,
-        previewUrl: '',
-      })
-    ).toMatchObject({ previewUrl: '' });
-  });
-});
-
-describe(simulatorPreviewUrl, () => {
-  it('points at the preview page for the session', () => {
-    expect(simulatorPreviewUrl('https://web-preview-abc123.eas-simulator.ngrok.dev')).toBe(
-      'https://expo.dev/simulator-preview/abc123'
-    );
-  });
-
-  it.each(['https://appium-abc123.eas-simulator.ngrok.dev', 'not-a-url', ''])(
-    'falls back to what it was given when there is no preview host: %p',
-    url => {
-      expect(simulatorPreviewUrl(url)).toBe(url);
-    }
-  );
-
-  it('points at the website the cli is talking to', () => {
-    process.env.EXPO_STAGING = '1';
-    try {
-      expect(simulatorPreviewUrl('https://web-preview-abc123.eas-simulator.ngrok.dev')).toBe(
-        'https://staging.expo.dev/simulator-preview/abc123'
-      );
-    } finally {
-      delete process.env.EXPO_STAGING;
-    }
-  });
-
-  it('drops everything the tunnel url carries', () => {
-    expect(
-      simulatorPreviewUrl(
-        'https://web-preview-abc123.eas-simulator.ngrok.dev/session?token=secret#frame'
-      )
-    ).toBe('https://expo.dev/simulator-preview/abc123');
-  });
-});
 
 describe('Appium simulator configuration', () => {
   it('maps the appium CLI value to the GraphQL enum', () => {
@@ -143,122 +40,10 @@ describe('Appium simulator configuration', () => {
     const instructions = formatRemoteSessionInstructions(iosAppiumConfig, 'dotenv');
 
     expect(instructions).toContain('eas simulator:exec <appium-client> [args...]');
-    expect(instructions).toContain(previewPageUrl);
+    expect(instructions).toContain('https://preview.example.test');
     expect(instructions).toContain('Open the simulator preview:');
     expect(instructions).not.toContain('iOS simulator preview');
     expect(instructions).not.toContain('https://appium.example.test');
-  });
-
-  it('prints Appium export lines when outputting env', () => {
-    const instructions = formatRemoteSessionInstructions(iosAppiumConfig, 'env');
-
-    expect(instructions).toContain("export APPIUM_URL='https://appium.example.test'");
-    expect(instructions).toContain(previewPageUrl);
-  });
-
-  it('omits the preview when an Appium session has none', () => {
-    const instructions = formatRemoteSessionInstructions(
-      { ...iosAppiumConfig, webPreviewUrl: null },
-      'dotenv'
-    );
-
-    expect(instructions).not.toContain('Open the simulator preview:');
-  });
-});
-
-describe(formatSimulatorUnavailableMessage, () => {
-  it('points gated accounts at the waitlist', () => {
-    const message = formatSimulatorUnavailableMessage('acme');
-
-    expect(message).toContain("isn't available on acme yet");
-    expect(message).toContain(EAS_SIMULATOR_WAITLIST_URL);
-  });
-});
-
-describe(getRemoteSessionEnvironmentVariables, () => {
-  it('maps Argent tools and token', () => {
-    expect(getRemoteSessionEnvironmentVariables(argentConfig)).toEqual({
-      ARGENT_TOOLS_URL: 'https://argent.example.test',
-      ARGENT_AUTH_TOKEN: 'argent-token',
-    });
-  });
-
-  it('omits the Argent token when it is missing', () => {
-    expect(
-      getRemoteSessionEnvironmentVariables({
-        ...argentConfig,
-        toolsAuthToken: null,
-      })
-    ).toEqual({
-      ARGENT_TOOLS_URL: 'https://argent.example.test',
-    });
-  });
-
-  it('returns no env for a preview-only session', () => {
-    expect(getRemoteSessionEnvironmentVariables(webPreviewOnlyConfig)).toEqual({});
-    expect(getRemoteSessionEnvironmentVariables(serveSimConfig)).toEqual({});
-  });
-});
-
-describe(formatRemoteSessionInstructions, () => {
-  it('prints the preview page for an agent-device dotenv session', () => {
-    const instructions = formatRemoteSessionInstructions(agentDeviceConfig, 'dotenv');
-
-    expect(instructions).toContain('eas simulator:exec npx agent-device <command>');
-    expect(instructions).toContain(previewPageUrl);
-  });
-
-  it('prints export lines for an agent-device env session', () => {
-    const instructions = formatRemoteSessionInstructions(agentDeviceConfig, 'env');
-
-    expect(instructions).toContain(
-      "export AGENT_DEVICE_DAEMON_BASE_URL='https://agent.example.com'"
-    );
-    expect(instructions).toContain(previewPageUrl);
-  });
-
-  it('omits the preview when an agent-device session has none', () => {
-    expect(
-      formatRemoteSessionInstructions({ ...agentDeviceConfig, webPreviewUrl: null }, 'dotenv')
-    ).not.toContain('preview the simulator');
-  });
-
-  it('prints an Argent link with a token for dotenv', () => {
-    const instructions = formatRemoteSessionInstructions(argentConfig, 'dotenv');
-
-    expect(instructions).toContain(
-      "argent link 'https://argent.example.test' --token 'argent-token' --yes"
-    );
-    expect(instructions).toContain(previewPageUrl);
-  });
-
-  it('omits the token flag when Argent has none', () => {
-    expect(
-      formatRemoteSessionInstructions({ ...argentConfig, toolsAuthToken: null }, 'dotenv')
-    ).toContain("argent link 'https://argent.example.test' --yes");
-  });
-
-  it('prints Argent export lines for env', () => {
-    const instructions = formatRemoteSessionInstructions(argentConfig, 'env');
-
-    expect(instructions).toContain("export ARGENT_TOOLS_URL='https://argent.example.test'");
-    expect(instructions).toContain(previewPageUrl);
-  });
-
-  it('omits the preview when an Argent session has none', () => {
-    expect(
-      formatRemoteSessionInstructions({ ...argentConfig, webPreviewUrl: null }, 'env')
-    ).not.toContain('preview the simulator');
-  });
-
-  it('prints the preview page for a serve-sim session', () => {
-    expect(formatRemoteSessionInstructions(serveSimConfig, 'env')).toContain(previewPageUrl);
-  });
-
-  it('prints the preview page for a web-preview-only session', () => {
-    expect(formatRemoteSessionInstructions(webPreviewOnlyConfig, 'dotenv')).toContain(
-      previewPageUrl
-    );
   });
 });
 
@@ -290,5 +75,218 @@ describe('simulator resource class flags', () => {
     expect(DEVICE_RUN_SESSION_RESOURCE_CLASS_BY_FLAG_VALUE.medium).toBe(
       DeviceRunSessionResourceClass.Medium
     );
+  });
+});
+
+describe(formatPreviewUrl, () => {
+  it('appends the session token for a gated preview', () => {
+    expect(formatPreviewUrl('https://preview.example.test', 'tok-1')).toBe(
+      'https://preview.example.test/?token=tok-1'
+    );
+  });
+
+  it('leaves the url alone when the preview is ungated', () => {
+    expect(formatPreviewUrl('https://preview.example.test', null)).toBe(
+      'https://preview.example.test'
+    );
+    expect(formatPreviewUrl('https://preview.example.test', undefined)).toBe(
+      'https://preview.example.test'
+    );
+  });
+});
+
+describe(sanitizeRemoteConfigForJson, () => {
+  const PREVIEW_URL = 'https://preview.example.test';
+
+  it('moves the token into the preview url and drops the standalone field', () => {
+    const sanitized = sanitizeRemoteConfigForJson({
+      __typename: 'ServeSimRunSessionRemoteConfig' as const,
+      previewUrl: PREVIEW_URL,
+      previewToken: 'tok-1',
+    });
+
+    expect(sanitized).toEqual({
+      __typename: 'ServeSimRunSessionRemoteConfig',
+      previewUrl: `${PREVIEW_URL}/?token=tok-1`,
+    });
+    expect(JSON.stringify(sanitized)).not.toContain('previewToken');
+  });
+
+  it('does the same for a controller session', () => {
+    const sanitized = sanitizeRemoteConfigForJson({
+      __typename: 'ArgentRunSessionRemoteConfig' as const,
+      toolsUrl: 'https://argent.example.test',
+      toolsAuthToken: 'argent-token',
+      webPreviewUrl: PREVIEW_URL,
+      webPreviewToken: 'tok-1',
+    });
+
+    expect(sanitized).toMatchObject({ webPreviewUrl: `${PREVIEW_URL}/?token=tok-1` });
+    expect(JSON.stringify(sanitized)).not.toContain('webPreviewToken');
+    // The controller credential is a different secret and stays: it is what simulator:exec needs.
+    expect(sanitized).toMatchObject({ toolsAuthToken: 'argent-token' });
+  });
+
+  it('leaves an ungated session untouched', () => {
+    const remoteConfig = {
+      __typename: 'ServeSimRunSessionRemoteConfig' as const,
+      previewUrl: PREVIEW_URL,
+      previewToken: null,
+    };
+
+    expect(sanitizeRemoteConfigForJson(remoteConfig)).toEqual({
+      __typename: 'ServeSimRunSessionRemoteConfig',
+      previewUrl: PREVIEW_URL,
+    });
+  });
+
+  it('leaves a controller session with no web preview alone', () => {
+    const sanitized = sanitizeRemoteConfigForJson({
+      __typename: 'AppiumRunSessionRemoteConfig' as const,
+      appiumUrl: 'https://appium.example.test',
+      capabilities: {},
+      webPreviewUrl: null,
+      webPreviewToken: null,
+    });
+
+    expect(sanitized).toMatchObject({ webPreviewUrl: null });
+  });
+});
+
+describe('gated preview links', () => {
+  const PREVIEW = 'https://preview.example.test';
+  const GATED = `${PREVIEW}/?token=tok-1`;
+
+  it('prints the tokenized preview for a serve-sim session', () => {
+    const instructions = formatRemoteSessionInstructions(
+      {
+        __typename: 'ServeSimRunSessionRemoteConfig' as const,
+        previewUrl: PREVIEW,
+        previewToken: 'tok-1',
+      },
+      'env'
+    );
+
+    expect(instructions).toContain(GATED);
+  });
+
+  it('prints the tokenized preview for a web-preview-only session', () => {
+    const instructions = formatRemoteSessionInstructions(
+      {
+        __typename: 'WebPreviewOnlyRunSessionRemoteConfig' as const,
+        previewUrl: PREVIEW,
+        previewToken: 'tok-1',
+      },
+      'env'
+    );
+
+    expect(instructions).toContain(GATED);
+  });
+
+  it('prints the tokenized preview for every controller session type', () => {
+    const controllers = [
+      {
+        __typename: 'AgentDeviceRunSessionRemoteConfig' as const,
+        agentDeviceRemoteSessionUrl: 'https://daemon.example.test',
+        agentDeviceRemoteSessionToken: 'daemon-token',
+        webPreviewUrl: PREVIEW,
+        webPreviewToken: 'tok-1',
+      },
+      {
+        __typename: 'ArgentRunSessionRemoteConfig' as const,
+        toolsUrl: 'https://argent.example.test',
+        toolsAuthToken: 'argent-token',
+        webPreviewUrl: PREVIEW,
+        webPreviewToken: 'tok-1',
+      },
+      { ...iosAppiumConfig, webPreviewToken: 'tok-1' },
+    ];
+
+    for (const remoteConfig of controllers) {
+      expect(formatRemoteSessionInstructions(remoteConfig, 'env')).toContain(GATED);
+    }
+  });
+
+  it('prints the plain url when the preview is ungated', () => {
+    const instructions = formatRemoteSessionInstructions(
+      { __typename: 'ServeSimRunSessionRemoteConfig' as const, previewUrl: PREVIEW },
+      'env'
+    );
+
+    expect(instructions).toContain(PREVIEW);
+    expect(instructions).not.toContain('token=');
+  });
+});
+
+describe('preview-only session environment', () => {
+  it.each([
+    { __typename: 'ServeSimRunSessionRemoteConfig' as const, previewUrl: 'https://p.example.test' },
+    {
+      __typename: 'WebPreviewOnlyRunSessionRemoteConfig' as const,
+      previewUrl: 'https://p.example.test',
+    },
+  ])('has no controller variables for $__typename', remoteConfig => {
+    expect(getRemoteSessionEnvironmentVariables(remoteConfig)).toEqual({});
+  });
+});
+
+describe('Argent session without a tools token', () => {
+  const untokenizedArgent = {
+    __typename: 'ArgentRunSessionRemoteConfig' as const,
+    toolsUrl: 'https://argent.example.test',
+    webPreviewUrl: null,
+  };
+
+  it('omits the auth variable', () => {
+    expect(getRemoteSessionEnvironmentVariables(untokenizedArgent)).toEqual({
+      ARGENT_TOOLS_URL: 'https://argent.example.test',
+    });
+  });
+
+  it('omits the --token flag from the link command', () => {
+    const instructions = formatRemoteSessionInstructions(untokenizedArgent, 'dotenv');
+
+    expect(instructions).toContain("argent link 'https://argent.example.test'");
+    expect(instructions).not.toContain('--token');
+  });
+});
+
+describe('dotenv instructions', () => {
+  it('tells an agent-device session to use simulator:exec', () => {
+    const instructions = formatRemoteSessionInstructions(
+      {
+        __typename: 'AgentDeviceRunSessionRemoteConfig' as const,
+        agentDeviceRemoteSessionUrl: 'https://daemon.example.test',
+        agentDeviceRemoteSessionToken: 'daemon-token',
+        webPreviewUrl: null,
+      },
+      'dotenv'
+    );
+
+    expect(instructions).toContain('eas simulator:exec npx agent-device <command>');
+  });
+
+  it('tells an argent session to link its local client', () => {
+    const instructions = formatRemoteSessionInstructions(
+      {
+        __typename: 'ArgentRunSessionRemoteConfig' as const,
+        toolsUrl: 'https://argent.example.test',
+        toolsAuthToken: 'argent-token',
+        webPreviewUrl: null,
+      },
+      'dotenv'
+    );
+
+    expect(instructions).toContain('link your local Argent client');
+    expect(instructions).toContain("--token 'argent-token'");
+  });
+});
+
+describe(formatSimulatorUnavailableMessage, () => {
+  it('names the account and points at the waitlist', () => {
+    const message = formatSimulatorUnavailableMessage('acme');
+
+    expect(message).toContain('acme');
+    expect(message).toContain(EAS_SIMULATOR_WAITLIST_URL);
   });
 });

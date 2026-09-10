@@ -58,12 +58,17 @@ export function createStartWebPreviewRemoteSessionBuildFunction(
         timeoutMs: STARTUP_TIMEOUT_MS,
         packageVersion,
       });
+      logger.info(`Preview URL: ${webPreview.previewPageUrl} (server: ${webPreview.apiUrl}).`);
 
       try {
         await uploadRemoteSessionConfigAsync({
           ctx,
           deviceRunSessionId,
-          remoteConfig: { previewUrl: webPreview.previewUrl },
+          remoteConfig: {
+            previewUrl: webPreview.previewPageUrl,
+            previewApiUrl: webPreview.apiUrl,
+            ...(webPreview.previewToken ? { previewToken: webPreview.previewToken } : {}),
+          },
           logger,
         });
 

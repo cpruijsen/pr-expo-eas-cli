@@ -5,6 +5,10 @@ import { withErrorHandlingAsync } from '../client';
 import {
   AppObserveAppVersion,
   AppObserveError,
+  AppObserveErrorGroup,
+  AppObserveErrorOccurrencesFilter,
+  AppObserveErrorOccurrencesOrderBy,
+  AppObserveErrorsGroupsInput,
   AppObserveLogsOrderBy,
   AppObserveMetric,
   AppObserveMetricsListFilter,
@@ -24,6 +28,8 @@ import { print } from 'graphql';
 import {
   AppObserveAppVersionFragmentNode,
   AppObserveErrorFragmentNode,
+  AppObserveErrorGroupFragmentNode,
+  AppObserveErrorOccurrenceFragmentNode,
   AppObserveMetricFragmentNode,
   AppObserveUserEventFragmentNode,
 } from '../types/Observe';
@@ -156,6 +162,51 @@ type AppObserveNavigationRoutesQueryVariables = {
   orderBy?: AppObserveNavigationOrderBy;
 };
 
+type AppObserveErrorGroupsQuery = {
+  app: {
+    byId: {
+      id: string;
+      observe: {
+        errors: {
+          groups: {
+            isTruncated: boolean;
+            groups: AppObserveErrorGroup[];
+          };
+        };
+      };
+    };
+  };
+};
+
+type AppObserveErrorGroupsQueryVariables = {
+  appId: string;
+  input: AppObserveErrorsGroupsInput;
+};
+
+type AppObserveErrorOccurrencesQuery = {
+  app: {
+    byId: {
+      id: string;
+      observe: {
+        errors: {
+          occurrences: {
+            pageInfo: PageInfo;
+            edges: Array<{ cursor: string; node: AppObserveError }>;
+          };
+        };
+      };
+    };
+  };
+};
+
+type AppObserveErrorOccurrencesQueryVariables = {
+  appId: string;
+  filter: AppObserveErrorOccurrencesFilter;
+  first?: number;
+  after?: string;
+  orderBy?: AppObserveErrorOccurrencesOrderBy;
+};
+
 type AppObserveSessionEventsQuery = {
   app: {
     byId: {
@@ -183,6 +234,35 @@ type AppObserveSessionEventsQueryVariables = {
   first?: number;
   metricsOrderBy?: AppObserveMetricsListOrderBy;
   logsOrderBy?: AppObserveLogsOrderBy;
+};
+
+type AppObserveMetricByIdQuery = {
+  app: {
+    byId: {
+      id: string;
+      observe: {
+        metrics: {
+          metric: AppObserveMetric | null;
+        };
+      };
+    };
+  };
+};
+
+type AppObserveLogByIdQuery = {
+  app: {
+    byId: {
+      id: string;
+      observe: {
+        log: AppObserveSessionLog | null;
+      };
+    };
+  };
+};
+
+type AppObserveByIdQueryVariables = {
+  appId: string;
+  id: string;
 };
 
 export const ObserveQuery = {
@@ -466,6 +546,99 @@ export const ObserveQuery = {
     };
   },
 
+  async errorGroupsAsync(
+    graphqlClient: ExpoGraphqlClient,
+    { appId, input }: { appId: string; input: AppObserveErrorsGroupsInput }
+  ): Promise<{ groups: AppObserveErrorGroup[]; isTruncated: boolean }> {
+    const data = await withErrorHandlingAsync(
+      graphqlClient
+        .query<AppObserveErrorGroupsQuery, AppObserveErrorGroupsQueryVariables>(
+          gql`
+            query AppObserveErrorGroups($appId: String!, $input: AppObserveErrorsGroupsInput!) {
+              app {
+                byId(appId: $appId) {
+                  id
+                  observe {
+                    errors {
+                      groups(input: $input) {
+                        isTruncated
+                        groups {
+                          ...AppObserveErrorGroupFragment
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            ${print(AppObserveErrorGroupFragmentNode)}
+          `,
+          { appId, input }
+        )
+        .toPromise()
+    );
+
+    return data.app.byId.observe.errors.groups;
+  },
+
+  async errorOccurrencesAsync(
+    graphqlClient: ExpoGraphqlClient,
+    variables: AppObserveErrorOccurrencesQueryVariables
+  ): Promise<{ occurrences: AppObserveError[]; pageInfo: PageInfo }> {
+    const data = await withErrorHandlingAsync(
+      graphqlClient
+        .query<AppObserveErrorOccurrencesQuery, AppObserveErrorOccurrencesQueryVariables>(
+          gql`
+            query AppObserveErrorOccurrences(
+              $appId: String!
+              $filter: AppObserveErrorOccurrencesFilter
+              $first: Int
+              $after: String
+              $orderBy: AppObserveErrorOccurrencesOrderBy
+            ) {
+              app {
+                byId(appId: $appId) {
+                  id
+                  observe {
+                    errors {
+                      occurrences(
+                        filter: $filter
+                        first: $first
+                        after: $after
+                        orderBy: $orderBy
+                      ) {
+                        pageInfo {
+                          hasNextPage
+                          hasPreviousPage
+                          endCursor
+                        }
+                        edges {
+                          cursor
+                          node {
+                            id
+                            ...AppObserveErrorOccurrenceFragment
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            ${print(AppObserveErrorOccurrenceFragmentNode)}
+          `,
+          variables
+        )
+        .toPromise()
+    );
+
+    const { edges, pageInfo } = data.app.byId.observe.errors.occurrences;
+    return {
+      occurrences: edges.map(edge => edge.node),
+      pageInfo,
+    };
+  },
+
   async sessionEventsAsync(
     graphqlClient: ExpoGraphqlClient,
     variables: AppObserveSessionEventsQueryVariables
@@ -545,5 +718,76 @@ export const ObserveQuery = {
       metricsPageInfo: metrics.pageInfo,
       logsPageInfo: logs.pageInfo,
     };
+  },
+
+  async metricByIdAsync(
+    graphqlClient: ExpoGraphqlClient,
+    { appId, id }: AppObserveByIdQueryVariables
+  ): Promise<AppObserveMetric | null> {
+    const data = await withErrorHandlingAsync(
+      graphqlClient
+        .query<AppObserveMetricByIdQuery, AppObserveByIdQueryVariables>(
+          gql`
+            query AppObserveMetricById($appId: String!, $id: ID!) {
+              app {
+                byId(appId: $appId) {
+                  id
+                  observe {
+                    metrics {
+                      metric(id: $id) {
+                        id
+                        ...AppObserveMetricFragment
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            ${print(AppObserveMetricFragmentNode)}
+          `,
+          { appId, id }
+        )
+        .toPromise()
+    );
+
+    return data.app.byId.observe.metrics.metric ?? null;
+  },
+
+  async logByIdAsync(
+    graphqlClient: ExpoGraphqlClient,
+    { appId, id }: AppObserveByIdQueryVariables
+  ): Promise<AppObserveSessionLog | null> {
+    const data = await withErrorHandlingAsync(
+      graphqlClient
+        .query<AppObserveLogByIdQuery, AppObserveByIdQueryVariables>(
+          gql`
+            query AppObserveLogById($appId: String!, $id: ID!) {
+              app {
+                byId(appId: $appId) {
+                  id
+                  observe {
+                    log(id: $id) {
+                      id
+                      __typename
+                      ... on AppObserveUserEvent {
+                        ...AppObserveUserEventFragment
+                      }
+                      ... on AppObserveError {
+                        ...AppObserveErrorFragment
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            ${print(AppObserveUserEventFragmentNode)}
+            ${print(AppObserveErrorFragmentNode)}
+          `,
+          { appId, id }
+        )
+        .toPromise()
+    );
+
+    return data.app.byId.observe.log ?? null;
   },
 };

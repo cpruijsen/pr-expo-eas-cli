@@ -6,20 +6,38 @@ This is the log of notable changes to EAS CLI and related packages.
 
 ### 🛠 Breaking changes
 
+### 🎉 New features
+
+- [build-tools] Require the serve-sim session token for device run session previews, so the tunnel no longer exposes the shell-exec route. ([#4306](https://github.com/expo/eas-cli/pull/4306) by [@gwdp](https://github.com/gwdp))
+- [build-tools] Report the expo.dev preview page as a simulator session's preview URL, and the preview server behind it as `previewApiUrl`. ([#4353](https://github.com/expo/eas-cli/pull/4353) by [@gwdp](https://github.com/gwdp))
+
+### 🐛 Bug fixes
+
+### 🧹 Chores
+
+## [24.0.0](https://github.com/expo/eas-cli/releases/tag/v24.0.0) - 2026-09-09
+
+### 🛠 Breaking changes
+
 - [eas-cli] Align the `eas observe:*` commands with the renamed Observe GraphQL schema. `--json` output now uses `name`/`value` instead of `metricName`/`metricValue` (metrics) and `name` instead of `eventName` (log events and event-name summaries), and `eas observe:events` now lists user-defined events only — exceptions moved to the new `eas observe:errors`. ([#4338](https://github.com/expo/eas-cli/pull/4338) by [@douglowder](https://github.com/douglowder))
 
 ### 🎉 New features
 
-- [build-tools] Log the expo.dev simulator preview page in device-run job logs instead of the raw web-preview tunnel URL.
-- [eas-cli] `eas simulator:start` and `eas simulator:get` now report the expo.dev preview page instead of the raw tunnel URL, in both the printed instructions and `--json`. ([#4352](https://github.com/expo/eas-cli/pull/4352) by [@gwdp](https://github.com/gwdp))
+- [build-tools] Add `lcd_width`, `lcd_height`, and `lcd_density` inputs to configure the Android emulator display. ([#4349](https://github.com/expo/eas-cli/pull/4349) by [@krystofwoldrich-agent](https://github.com/krystofwoldrich-agent))
 - [eas-cli] Add `eas channel:protect` and `eas channel:unprotect` to manage EAS Update channel protection, and show protection in channel list and view output. ([#4319](https://github.com/expo/eas-cli/pull/4319) by [@sjkim-expo](https://github.com/sjkim-expo))
+- [eas-cli] Add `eas observe:errors` to display error and exception issue groups (grouped by fingerprint), with `--fingerprint <fingerprint>` to drill into a group's individual occurrences and stack traces. ([#4339](https://github.com/expo/eas-cli/pull/4339) by [@douglowder](https://github.com/douglowder))
+- [eas-cli] Add `eas observe:event` to display a single Observe event (metric, log, or error) by its ID. ([#4252](https://github.com/expo/eas-cli/pull/4252) by [@douglowder](https://github.com/douglowder))
 
 ### 🐛 Bug fixes
 
+- [build-tools] Start Argent remote sessions with `bun x` so they work when the `bunx` symlink is missing. ([491b372a](https://github.com/expo/eas-cli/commit/491b372a) by [@krystofwoldrich](https://github.com/krystofwoldrich))
 - [build-tools] Reduce `expo-device-hub` preview resolution from 1280 px to 960 px to match `serve-sim` and lower streaming bandwidth. ([#4326](https://github.com/expo/eas-cli/pull/4326) by [@krystofwoldrich-agent](https://github.com/krystofwoldrich-agent))
 - [build-tools] Install FFmpeg before launching `expo-device-hub` in Android device sessions. ([#4332](https://github.com/expo/eas-cli/pull/4332) by [@krystofwoldrich-agent](https://github.com/krystofwoldrich-agent))
+- [eas-cli] Print the session token in simulator preview links, so they still open once the preview is gated. ([#4312](https://github.com/expo/eas-cli/pull/4312) by [@gwdp](https://github.com/gwdp))
 
 ### 🧹 Chores
+
+- [eas-cli] Make ASC API key issuer identifier optional in GraphQL and credentials types. ([#4248](https://github.com/expo/eas-cli/pull/4248) by [@sswrk](https://github.com/sswrk))
 
 ## [23.2.0](https://github.com/expo/eas-cli/releases/tag/v23.2.0) - 2026-08-31
 

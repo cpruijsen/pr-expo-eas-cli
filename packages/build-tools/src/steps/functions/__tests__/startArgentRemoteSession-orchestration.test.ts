@@ -88,10 +88,12 @@ describe('createStartArgentRemoteSessionBuildFunction orchestration', () => {
     });
     jest.mocked(startNgrokTunnelAsync).mockResolvedValue({
       url: 'https://argent-abc.tunnel.example.com',
+      subdomainId: 'argent-abc',
       stopAsync: mockTunnelStopAsync,
     });
     jest.mocked(startDeviceWebPreviewWithTunnelAsync).mockResolvedValue({
-      previewUrl: 'https://web-preview.tunnel.example.com',
+      previewPageUrl: 'https://expo.dev/simulator-preview/preview-id',
+      apiUrl: 'https://web-preview.tunnel.example.com',
       stopAsync: mockPreviewStopAsync,
     });
     jest.mocked(uploadRemoteSessionConfigAsync).mockResolvedValue(undefined);
@@ -142,7 +144,10 @@ describe('createStartArgentRemoteSessionBuildFunction orchestration', () => {
     const spawnCalls = jest.mocked(spawn).mock.calls;
     const enableEventLogIndex = spawnCalls.findIndex(
       ([command, args]) =>
-        command === 'bunx' && Array.isArray(args) && args.includes('tool-server-event-log')
+        command === 'bun' &&
+        Array.isArray(args) &&
+        args[0] === 'x' &&
+        args.includes('tool-server-event-log')
     );
     expect(enableEventLogIndex).toBeGreaterThanOrEqual(0);
     expect(jest.mocked(spawn).mock.invocationCallOrder[enableEventLogIndex]).toBeLessThan(
@@ -176,7 +181,8 @@ describe('createStartArgentRemoteSessionBuildFunction orchestration', () => {
     expect(uploadRemoteSessionConfigAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         remoteConfig: expect.objectContaining({
-          webPreviewUrl: 'https://web-preview.tunnel.example.com',
+          webPreviewUrl: 'https://expo.dev/simulator-preview/preview-id',
+          previewApiUrl: 'https://web-preview.tunnel.example.com',
         }),
       })
     );

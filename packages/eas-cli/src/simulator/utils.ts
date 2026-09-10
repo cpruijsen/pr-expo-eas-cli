@@ -1,4 +1,3 @@
-import { getExpoWebsiteBaseUrl } from '../api';
 import {
   DeviceRunSessionByIdQuery,
   DeviceRunSessionResourceClass,
@@ -8,25 +7,6 @@ import { link } from '../log';
 
 type DeviceRunSessionByIdResult = DeviceRunSessionByIdQuery['deviceRunSessions']['byId'];
 export type DeviceRunSessionRemoteConfig = NonNullable<DeviceRunSessionByIdResult['remoteConfig']>;
-
-const PREVIEW_HOST = /^https:\/\/web-preview-([^./]+)\./;
-
-export function simulatorPreviewUrl(webPreviewUrl: string): string {
-  const previewId = PREVIEW_HOST.exec(webPreviewUrl)?.[1];
-  return previewId ? `${getExpoWebsiteBaseUrl()}/simulator-preview/${previewId}` : webPreviewUrl;
-}
-
-export function remoteConfigWithPreviewPageUrl(
-  remoteConfig: DeviceRunSessionRemoteConfig
-): DeviceRunSessionRemoteConfig {
-  if ('webPreviewUrl' in remoteConfig && remoteConfig.webPreviewUrl) {
-    return { ...remoteConfig, webPreviewUrl: simulatorPreviewUrl(remoteConfig.webPreviewUrl) };
-  }
-  if ('previewUrl' in remoteConfig && remoteConfig.previewUrl) {
-    return { ...remoteConfig, previewUrl: simulatorPreviewUrl(remoteConfig.previewUrl) };
-  }
-  return remoteConfig;
-}
 
 /** Landing page where accounts without access can request it. */
 export const EAS_SIMULATOR_WAITLIST_URL = 'https://expo.dev/services/simulators';
@@ -106,6 +86,47 @@ export function getRemoteSessionEnvironmentVariables(
 
 type RemoteSessionInstructionsConfigType = 'env' | 'dotenv';
 
+/**
+ * Preview link for a session. A gated serve-sim needs the session token, and a browser cannot send
+ * a header on a page load, so it rides the query. serve-sim swaps it for a cookie on the first load.
+ */
+export function formatPreviewUrl(url: string, token: string | null | undefined): string {
+  if (!token) {
+    return url;
+  }
+  const withToken = new URL(url);
+  withToken.searchParams.set('token', token);
+  return withToken.toString();
+}
+
+/**
+ * Remote config for `--json`. The preview URL carries the token and the standalone token field is
+ * dropped, so a consumer gets one URL that works rather than a bare URL that 401s next to a secret
+ * it has to know to combine.
+ */
+export function sanitizeRemoteConfigForJson(
+  remoteConfig: DeviceRunSessionRemoteConfig
+): DeviceRunSessionRemoteConfig {
+  switch (remoteConfig.__typename) {
+    case 'ServeSimRunSessionRemoteConfig':
+    case 'WebPreviewOnlyRunSessionRemoteConfig': {
+      const { previewToken, ...rest } = remoteConfig;
+      return { ...rest, previewUrl: formatPreviewUrl(remoteConfig.previewUrl, previewToken) };
+    }
+    case 'AgentDeviceRunSessionRemoteConfig':
+    case 'ArgentRunSessionRemoteConfig':
+    case 'AppiumRunSessionRemoteConfig': {
+      const { webPreviewToken, ...rest } = remoteConfig;
+      return {
+        ...rest,
+        webPreviewUrl: remoteConfig.webPreviewUrl
+          ? formatPreviewUrl(remoteConfig.webPreviewUrl, webPreviewToken)
+          : remoteConfig.webPreviewUrl,
+      };
+    }
+  }
+}
+
 export function formatRemoteSessionInstructions(
   remoteConfig: DeviceRunSessionRemoteConfig,
   configType: RemoteSessionInstructionsConfigType
@@ -132,7 +153,7 @@ export function formatRemoteSessionInstructions(
           '',
           '🌐 Open the following URL in your browser to preview the simulator:',
           '',
-          simulatorPreviewUrl(remoteConfig.webPreviewUrl)
+          formatPreviewUrl(remoteConfig.webPreviewUrl, remoteConfig.webPreviewToken)
         );
       }
       return lines.join('\n');
@@ -170,7 +191,7 @@ export function formatRemoteSessionInstructions(
           '',
           '🌐 Open the following URL in your browser to preview the simulator:',
           '',
-          simulatorPreviewUrl(remoteConfig.webPreviewUrl)
+          formatPreviewUrl(remoteConfig.webPreviewUrl, remoteConfig.webPreviewToken)
         );
       }
       return lines.join('\n');
@@ -198,7 +219,7 @@ export function formatRemoteSessionInstructions(
           '',
           'Open the simulator preview:',
           '',
-          simulatorPreviewUrl(remoteConfig.webPreviewUrl)
+          formatPreviewUrl(remoteConfig.webPreviewUrl, remoteConfig.webPreviewToken)
         );
       }
       return lines.join('\n');
@@ -207,13 +228,13 @@ export function formatRemoteSessionInstructions(
       return [
         '🌐 Open the following URL in your browser to access the simulator:',
         '',
-        simulatorPreviewUrl(remoteConfig.previewUrl),
+        formatPreviewUrl(remoteConfig.previewUrl, remoteConfig.previewToken),
       ].join('\n');
     case 'WebPreviewOnlyRunSessionRemoteConfig':
       return [
         '🌐 Open the following URL in your browser to access the simulator:',
         '',
-        simulatorPreviewUrl(remoteConfig.previewUrl),
+        formatPreviewUrl(remoteConfig.previewUrl, remoteConfig.previewToken),
       ].join('\n');
   }
 }
