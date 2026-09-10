@@ -542,7 +542,16 @@ describe(startDeviceWebPreviewWithTunnelAsync, () => {
     const port = Number(args[args.indexOf('--port') + 1]);
     expect(port).toBeGreaterThan(0);
     expect(command).toBe('npx');
-    expect(args).toEqual(createServeSimArgs({ port, turnArgs, metricsCorsArgs, packageVersion }));
+    expect(args).toEqual(
+      createServeSimArgs({
+        port,
+        turnArgs,
+        metricsCorsArgs,
+        frameAncestorArgs: ['--frame-ancestor', 'https://expo.dev'],
+        packageVersion,
+      })
+    );
+    expect(args).toContain('--frame-ancestor');
     expect(ngrok.forward).toHaveBeenCalledWith(expect.objectContaining({ addr: port }));
     expect(preview.apiUrl).toBe('https://ios-preview.example.test');
 

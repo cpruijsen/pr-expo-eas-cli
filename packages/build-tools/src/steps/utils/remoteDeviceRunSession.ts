@@ -647,11 +647,13 @@ export function createServeSimArgs({
   port,
   turnArgs = [],
   metricsCorsArgs = [],
+  frameAncestorArgs = [],
   packageVersion,
 }: {
   port: number;
   turnArgs?: string[];
   metricsCorsArgs?: string[];
+  frameAncestorArgs?: string[];
   packageVersion?: string;
 }): string[] {
   return [
@@ -676,6 +678,7 @@ export function createServeSimArgs({
     SERVE_SIM_VIDEO_FPS,
     ...turnArgs,
     ...metricsCorsArgs,
+    ...frameAncestorArgs,
   ];
 }
 
@@ -882,6 +885,7 @@ export async function startServeSimWithTunnelAsync(
   }
 ): Promise<ServeSimPreviewHandle> {
   const metricsCorsArgs = metricsCorsOriginToServeSimArgs(env);
+  const frameAncestorArgs = ['--frame-ancestor', websiteOrigin(env)];
   return await startWebPreviewWithTunnelAsync(ctx, {
     baseDomain,
     env,
@@ -890,7 +894,7 @@ export async function startServeSimWithTunnelAsync(
     serverName: 'serve-sim',
     packageSpec: createServeSimPackageSpec(packageVersion),
     createArgs: (port, turnArgs) =>
-      createServeSimArgs({ port, turnArgs, metricsCorsArgs, packageVersion }),
+      createServeSimArgs({ port, turnArgs, metricsCorsArgs, frameAncestorArgs, packageVersion }),
     readPreviewTokenAsync: async device => {
       const previewToken = await readServeSimPreviewTokenAsync(device);
       if (!previewToken) {
