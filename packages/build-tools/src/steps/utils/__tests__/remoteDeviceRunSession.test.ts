@@ -25,6 +25,7 @@ import {
   turnIceServersToWebPreviewArgs,
   waitForDeviceRunSessionStoppedAsync,
   waitForWebPreviewReadyAsync,
+  websiteOrigin,
 } from '../remoteDeviceRunSession';
 
 jest.mock('@ngrok/ngrok');
@@ -330,10 +331,10 @@ describe(startDeviceWebPreviewWithTunnelAsync, () => {
     '--turn-credential',
     'turn-credential',
   ];
-  const metricsCorsArgs = ['--metrics-cors-origin', 'https://expo.dev'];
+  const metricsCorsArgs = ['--metrics-cors-origin', 'https://metrics.expo.test'];
   const env = {
     DEVICE_RUN_SESSION_ID: 'drs-id',
-    EAS_SIMULATOR_METRICS_CORS_ORIGIN: 'https://expo.dev',
+    EAS_SIMULATOR_METRICS_CORS_ORIGIN: 'https://metrics.expo.test',
     NGROK_AUTHTOKEN: 'ngrok-token',
   } as unknown as BuildStepEnv;
 
@@ -450,6 +451,14 @@ describe(startDeviceWebPreviewWithTunnelAsync, () => {
     expect(preview.apiUrl).toBe('https://preview.example.test');
   });
 
+  it.each([
+    [{}, 'https://expo.dev'],
+    [{ EXPO_STAGING: '1' }, 'https://staging.expo.dev'],
+    [{ EXPO_LOCAL: '1' }, 'https://expo.test'],
+  ])('points the preview page at the website for the stage the worker runs in', (stage, origin) => {
+    expect(websiteOrigin({ ...env, ...stage })).toBe(origin);
+  });
+
   it('points the preview URL at the website page for the tunnel', async () => {
     jest.mocked(ngrok.forward).mockResolvedValue({
       url: () => 'https://preview.example.test',
@@ -459,7 +468,7 @@ describe(startDeviceWebPreviewWithTunnelAsync, () => {
     const preview = await startDeviceWebPreviewWithTunnelAsync(createCtxMock(), {
       runtimePlatform: BuildRuntimePlatform.DARWIN,
       baseDomain,
-      env: { ...env, EAS_SIMULATOR_METRICS_CORS_ORIGIN: 'https://staging.expo.dev' },
+      env: { ...env, EXPO_STAGING: '1' },
       logger: createLoggerMock(),
       timeoutMs: 10_000,
     });
@@ -471,26 +480,6 @@ describe(startDeviceWebPreviewWithTunnelAsync, () => {
     expect(ngrok.forward).toHaveBeenCalledWith(
       expect.objectContaining({ domain: `web-preview-${previewId}.${baseDomain}` })
     );
-  });
-
-  it('fails before opening a tunnel when the website origin is missing', async () => {
-    const close = jest.fn().mockResolvedValue(undefined);
-    jest.mocked(ngrok.forward).mockResolvedValue({
-      url: () => 'https://preview.example.test',
-      close,
-    } as never);
-    const { EAS_SIMULATOR_METRICS_CORS_ORIGIN: _origin, ...envWithoutOrigin } = env;
-
-    await expect(
-      startDeviceWebPreviewWithTunnelAsync(createCtxMock(), {
-        runtimePlatform: BuildRuntimePlatform.DARWIN,
-        baseDomain,
-        env: envWithoutOrigin,
-        logger: createLoggerMock(),
-        timeoutMs: 10_000,
-      })
-    ).rejects.toThrow(/EAS_SIMULATOR_METRICS_CORS_ORIGIN is not set/);
-    expect(ngrok.forward).not.toHaveBeenCalled();
   });
 
   // serve-sim is always launched with --require-token, so a missing token means it is running

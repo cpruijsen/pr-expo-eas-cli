@@ -612,28 +612,27 @@ export function spawnDetached({
   };
 }
 
-// www injects the expo.dev origin here, so it is also where the preview page lives.
-function websiteOrigins(env: BuildStepEnv): string[] {
-  return (env.EAS_SIMULATOR_METRICS_CORS_ORIGIN ?? '')
-    .split(',')
-    .map(value => value.trim())
-    .filter(Boolean);
-}
-
-export function getWebsiteOriginOrThrow(env: BuildStepEnv): string {
-  const [origin] = websiteOrigins(env);
-  if (!origin) {
-    throw new SystemError(
-      'EAS_SIMULATOR_METRICS_CORS_ORIGIN is not set. ' +
-        'This step must run as part of a device run session ' +
-        'which injects EAS_SIMULATOR_METRICS_CORS_ORIGIN into the job environment.'
-    );
-  }
-  return origin;
+export function websiteOrigin(env: BuildStepEnv): string {
+  return env.EXPO_LOCAL
+    ? 'https://expo.test'
+    : env.EXPO_STAGING
+      ? 'https://staging.expo.dev'
+      : 'https://expo.dev';
 }
 
 export function metricsCorsOriginToServeSimArgs(env: BuildStepEnv): string[] {
-  return websiteOrigins(env).flatMap(origin => ['--metrics-cors-origin', origin]);
+  const origin = env.EAS_SIMULATOR_METRICS_CORS_ORIGIN;
+  if (!origin) {
+    return [];
+  }
+  const args: string[] = [];
+  for (const value of origin.split(',')) {
+    const trimmed = value.trim();
+    if (trimmed) {
+      args.push('--metrics-cors-origin', trimmed);
+    }
+  }
+  return args;
 }
 
 function createServeSimPackageSpec(packageVersion: string | undefined): string {
@@ -829,7 +828,6 @@ async function startWebPreviewWithTunnelAsync(
       timeoutMs,
     });
     const previewToken = await readPreviewTokenAsync?.(device);
-    const websiteOrigin = getWebsiteOriginOrThrow(env);
     const tunnel = await startNgrokTunnelAsync({
       port,
       subdomainPrefix: 'web-preview',
@@ -838,7 +836,10 @@ async function startWebPreviewWithTunnelAsync(
       logger,
     });
     return {
-      previewPageUrl: new URL(`/simulator-preview/${tunnel.subdomainId}`, websiteOrigin).toString(),
+      previewPageUrl: new URL(
+        `/simulator-preview/${tunnel.subdomainId}`,
+        websiteOrigin(env)
+      ).toString(),
       apiUrl: tunnel.url,
       previewToken,
       stopAsync: async () => {
