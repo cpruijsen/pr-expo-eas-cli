@@ -30,17 +30,6 @@ const EXPO_DEVICE_HUB_PACKAGE_NAME = 'expo-device-hub';
 const EXPO_DEVICE_HUB_MAX_DIMENSION = '960';
 const EXPO_DEVICE_HUB_VIDEO_BITRATE = '6000000';
 const EXPO_DEVICE_HUB_VIDEO_FPS = '60';
-const PREVIEW_HOST = /^https:\/\/web-preview-([^./]+)\./;
-
-export function simulatorPreviewUrl(webPreviewUrl: string, env: BuildStepEnv): string {
-  const previewId = PREVIEW_HOST.exec(webPreviewUrl)?.[1];
-  const websiteBaseUrl = env.EXPO_LOCAL
-    ? 'http://expo.test'
-    : env.EXPO_STAGING
-      ? 'https://staging.expo.dev'
-      : 'https://expo.dev';
-  return previewId ? `${websiteBaseUrl}/simulator-preview/${previewId}` : webPreviewUrl;
-}
 
 const START_DEVICE_RUN_SESSION_MUTATION = graphql(`
   mutation StartDeviceRunSession($deviceRunSessionId: ID!, $remoteConfig: JSONObject!) {
@@ -623,19 +612,28 @@ export function spawnDetached({
   };
 }
 
-export function metricsCorsOriginToServeSimArgs(env: BuildStepEnv): string[] {
-  const origin = env.EAS_SIMULATOR_METRICS_CORS_ORIGIN;
+// www injects the expo.dev origin here, so it is also where the preview page lives.
+function websiteOrigins(env: BuildStepEnv): string[] {
+  return (env.EAS_SIMULATOR_METRICS_CORS_ORIGIN ?? '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+}
+
+export function getWebsiteOriginOrThrow(env: BuildStepEnv): string {
+  const [origin] = websiteOrigins(env);
   if (!origin) {
-    return [];
+    throw new SystemError(
+      'EAS_SIMULATOR_METRICS_CORS_ORIGIN is not set. ' +
+        'This step must run as part of a device run session ' +
+        'which injects EAS_SIMULATOR_METRICS_CORS_ORIGIN into the job environment.'
+    );
   }
-  const args: string[] = [];
-  for (const value of origin.split(',')) {
-    const trimmed = value.trim();
-    if (trimmed) {
-      args.push('--metrics-cors-origin', trimmed);
-    }
-  }
-  return args;
+  return origin;
+}
+
+export function metricsCorsOriginToServeSimArgs(env: BuildStepEnv): string[] {
+  return websiteOrigins(env).flatMap(origin => ['--metrics-cors-origin', origin]);
 }
 
 function createServeSimPackageSpec(packageVersion: string | undefined): string {
@@ -782,7 +780,8 @@ export async function waitForWebPreviewReadyAsync({
 }
 
 export type DeviceWebPreviewHandle = {
-  previewUrl: string;
+  previewPageUrl: string;
+  apiUrl: string;
   /** Session token gating the preview. Only serve-sim mints one. */
   previewToken?: string;
   stopAsync: () => Promise<void>;
@@ -830,6 +829,7 @@ async function startWebPreviewWithTunnelAsync(
       timeoutMs,
     });
     const previewToken = await readPreviewTokenAsync?.(device);
+    const websiteOrigin = getWebsiteOriginOrThrow(env);
     const tunnel = await startNgrokTunnelAsync({
       port,
       subdomainPrefix: 'web-preview',
@@ -837,9 +837,9 @@ async function startWebPreviewWithTunnelAsync(
       authtoken: getNgrokAuthtokenOrThrow(env),
       logger,
     });
-    logger.info(`Web preview URL: ${simulatorPreviewUrl(tunnel.url, env)}`);
     return {
-      previewUrl: tunnel.url,
+      previewPageUrl: new URL(`/simulator-preview/${tunnel.subdomainId}`, websiteOrigin).toString(),
+      apiUrl: tunnel.url,
       previewToken,
       stopAsync: async () => {
         const results = await Promise.allSettled([tunnel.stopAsync(), previewServer.stopAsync()]);
@@ -963,6 +963,7 @@ export async function startDeviceWebPreviewWithTunnelAsync(
 
 export type NgrokTunnelHandle = {
   url: string;
+  subdomainId: string;
   stopAsync: () => Promise<void>;
 };
 
@@ -981,12 +982,9 @@ export async function startNgrokTunnelAsync({
   rewriteHostHeader?: boolean;
   logger: bunyan;
 }): Promise<NgrokTunnelHandle> {
-  const domain = `${subdomainPrefix}-${randomBytes(16).toString('hex')}.${baseDomain}`;
-  if (subdomainPrefix === 'web-preview') {
-    logger.info(`Starting web preview tunnel -> http://localhost:${port}.`);
-  } else {
-    logger.info(`Starting ngrok tunnel ${domain} -> http://localhost:${port}.`);
-  }
+  const subdomainId = randomBytes(16).toString('hex');
+  const domain = `${subdomainPrefix}-${subdomainId}.${baseDomain}`;
+  logger.info(`Starting ngrok tunnel ${domain} -> http://localhost:${port}.`);
   // Run the ngrok agent in-process via the SDK; it keeps the session alive until
   // the process exits, and the step blocks forever to hold it open.
   const listener = await ngrok.forward({
@@ -1003,6 +1001,7 @@ export async function startNgrokTunnelAsync({
   let stopped = false;
   return {
     url,
+    subdomainId,
     stopAsync: async () => {
       if (stopped) {
         return;
