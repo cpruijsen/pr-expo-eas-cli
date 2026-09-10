@@ -17,6 +17,7 @@ This is the log of notable changes to EAS CLI and related packages.
 ### 🐛 Bug fixes
 
 - [build-tools] Report a system error when project source refresh fails for a remote build. ([#4359](https://github.com/expo/eas-cli/pull/4359) by [@sjchmiela](https://github.com/sjchmiela))
+- [eas-cli] Stop fetching the primary account in the login query. Commands that need it now fetch it on demand, so scoped access tokens without primary account access no longer fail at login. ([#4380](https://github.com/expo/eas-cli/pull/4380) by [@wschurman](https://github.com/wschurman))
 
 ### 🧹 Chores
 
