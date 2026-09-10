@@ -127,6 +127,7 @@ export function createStartAgentDeviceRemoteSessionBuildFunction(
             agentDeviceRemoteSessionUrl,
             agentDeviceRemoteSessionToken: daemonToken,
             webPreviewUrl: webPreview.previewUrl,
+            ...(webPreview.previewToken ? { webPreviewToken: webPreview.previewToken } : {}),
           },
           logger,
         });
